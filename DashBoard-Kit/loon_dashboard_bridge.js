@@ -1,17 +1,12 @@
 /**
  * Loon DashBoard-Kit 桌面交互小组件 本地 OpenAPI 桥接脚本
- *
- * 触发方式（插件里已配好三条规则，任选其一命中即可）：
- *   http://cp.cloudflare.com/loon-bridge
- *   http://1.1.1.1/loon-bridge            ← 无 DNS 依赖，最稳，实测可用
- *   http://loon.lan/api
+ * 用于响应 http://loon.lan/api 或 http://loon.local/api 请求
  *
  * 支持参数：
  * - action: "status" | "set_mode" | "set_policy"
  * - mode: "direct" | "filter" | "proxy" 或 0 | 1 | 2
  * - policy: 策略组名称 (例如 "节点选择")
- * - node: 目标节点名称
- * - group: 只探查指定策略组的候选节点
+ * - node: 目标节点名称 (例如 "🇭🇰 香港 01")
  */
 
 function parseQuery(urlStr) {
@@ -39,33 +34,64 @@ function parseQuery(urlStr) {
 function getSubPoliciesAsync(policyName, timeoutMs) {
   return new Promise((resolve) => {
     const started = Date.now();
+    let done = false;
+    let modeUsed = "callback";
+    const finish = (list, note) => {
+      if (done) return;
+      done = true;
+      resolve({ fired: true, list: list || [], ms: Date.now() - started, note: note || "", mode: modeUsed });
+    };
+    const timer = setTimeout(() => finish([], "timeout"), timeoutMs);
     try {
       if (typeof $config === "undefined" || typeof $config.getSubPolicies !== "function") {
-        resolve({ fired: false, list: [], ms: 0, note: "$config.getSubPolicies 不可用" });
+        clearTimeout(timer);
+        finish([], "api-missing");
         return;
       }
-      let finished = false;
-      const timer = setTimeout(() => {
-        if (!finished) {
-          finished = true;
-          resolve({ fired: false, list: [], ms: Date.now() - started });
-        }
-      }, timeoutMs);
-
-      // 不同版本回调签名可能是 (list) 或 (name, list)，这里两种都兼容
-      $config.getSubPolicies(policyName, function (a, b) {
-        if (finished) return;
-        finished = true;
-        clearTimeout(timer);
-        let arr = [];
-        if (Array.isArray(a)) arr = a;
-        else if (Array.isArray(b)) arr = b;
-        resolve({ fired: true, list: arr, ms: Date.now() - started });
+      // 回调形式
+      const ret = $config.getSubPolicies(policyName, function (a, b) {
+        if (Array.isArray(a)) { clearTimeout(timer); finish(a, ""); }
+        else if (Array.isArray(b)) { clearTimeout(timer); finish(b, ""); }
+        else { clearTimeout(timer); finish([], "callback-no-array: " + typeof a + "/" + typeof b); }
       });
+      // Promise 形式（部分版本返回 Promise 而不是走回调）
+      if (ret && typeof ret.then === "function") {
+        modeUsed = "promise";
+        ret
+          .then((arr) => { clearTimeout(timer); finish(Array.isArray(arr) ? arr : [], ""); })
+          .catch((e) => { clearTimeout(timer); finish([], "promise-err: " + e); });
+      }
     } catch (e) {
-      resolve({ fired: false, list: [], ms: Date.now() - started, note: String(e) });
+      clearTimeout(timer);
+      finish([], "throw: " + e);
     }
   });
+}
+
+/** 单独探查 getSelectedPolicy 的行为（同步 / Promise / 报错） */
+function probeSelectedPolicy(name) {
+  const out = { name: name, sync: null, thenable: false, err: "" };
+  try {
+    if (typeof $config === "undefined" || typeof $config.getSelectedPolicy !== "function") {
+      out.err = "api-missing";
+      return out;
+    }
+    const v = $config.getSelectedPolicy(name);
+    if (v && typeof v.then === "function") {
+      out.thenable = true;
+    } else if (typeof v === "string") {
+      out.sync = v;
+    } else if (v && typeof v === "object") {
+      out.sync = String(v.name || v.policy || v.selected || JSON.stringify(v));
+    } else if (v === undefined) {
+      out.sync = "(undefined)";
+    } else {
+      out.sync = String(v);
+    }
+  } catch (e) {
+    out.err = String(e);
+  }
+  return out;
 }
 
 (async () => {
@@ -132,6 +158,8 @@ function getSubPoliciesAsync(policyName, timeoutMs) {
     // 3.5 补齐 policy_select —— Loon 的 getConfig() 只会返回一部分策略组，
     // 缺失的组用 $config.getSelectedPolicy(name) 逐个查回来
     const filledPolicySelect = {};
+    const probeResults = {};
+    const thenableGroups = [];
     try {
       if (typeof $config !== "undefined" && typeof $config.getSelectedPolicy === "function") {
         const fillTimeoutAt = Date.now() + 2500;
@@ -140,16 +168,41 @@ function getSubPoliciesAsync(policyName, timeoutMs) {
           if (!g || policySelect[g]) continue;
           if (Date.now() > fillTimeoutAt) break;
           try {
-            const v = $config.getSelectedPolicy(g);
-            let name = "";
-            if (typeof v === "string") name = v;
-            else if (v && typeof v === "object") name = v.name || v.policy || v.selected || "";
-            if (name) {
-              policySelect[g] = String(name);
-              filledPolicySelect[g] = String(name);
+            const probe = probeSelectedPolicy(g);
+            if (probe.sync && probe.sync !== "(undefined)") {
+              policySelect[g] = probe.sync;
+              filledPolicySelect[g] = probe.sync;
+            } else if (probe.thenable) {
+              thenableGroups.push(g);
+            } else {
+              probeResults[g] = probe;
             }
           } catch (e) {}
         }
+
+        // 若为 Promise 形式，等它们回来
+        if (thenableGroups.length > 0) {
+          await Promise.all(
+            thenableGroups.map(async (g) => {
+              try {
+                const v = await $config.getSelectedPolicy(g);
+                let name = "";
+                if (typeof v === "string") name = v;
+                else if (v && typeof v === "object") name = v.name || v.policy || v.selected || "";
+                if (name) {
+                  policySelect[g] = String(name);
+                  filledPolicySelect[g] = String(name);
+                } else {
+                  probeResults[g] = { name: g, sync: "(promise-empty)", thenable: true, err: "" };
+                }
+              } catch (e) {
+                probeResults[g] = { name: g, sync: null, thenable: true, err: String(e) };
+              }
+            })
+          );
+        }
+      } else if (typeof $config !== "undefined") {
+        probeResults.__missing_api = { name: "getSelectedPolicy", sync: null, thenable: false, err: "api-missing" };
       }
     } catch (e) {}
 
@@ -185,6 +238,7 @@ function getSubPoliciesAsync(policyName, timeoutMs) {
       running_mode: runningModeStr,
       policy_select: policySelect,
       selected_policy_filled: filledPolicySelect,
+      selected_policy_probe: probeResults,
       sub_policies: subPoliciesMap,
       sub_debug: subDebug,
       all_policy_groups: allPolicyGroups,
@@ -192,6 +246,14 @@ function getSubPoliciesAsync(policyName, timeoutMs) {
       final: configObj.final || "",
       global_proxy: configObj.global_proxy || "",
       version: versionStr,
+      // ── 能力探查：把 Loon 实际暴露的 API / 字段列出来，便于对症下药 ──
+      config_api_keys: (function () {
+        try { return Object.keys($config || {}); } catch (e) { return []; }
+      })(),
+      environment: (function () {
+        try { return typeof $environment !== "undefined" ? $environment : null; } catch (e) { return null; }
+      })(),
+      config_obj_keys: Object.keys(configObj || {}),
       timestamp: Date.now(),
     };
 
