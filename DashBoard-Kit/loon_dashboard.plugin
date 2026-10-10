@@ -3,12 +3,12 @@
 #!author = SylvanRoe & BeThyself
 #!homepage = https://github.com/BeThyself/scripting
 #!icon = https://raw.githubusercontent.com/Loon0x00/Loon0x00.github.io/main/static/img/loon.png
-#!date = 2026-10-11 01:40:00
+#!date = 2026-10-11 01:50:00
 #!tag = 工具,小组件,面板
 #!system = iOS,iPadOS,macOS
 #!type = normal
 
 [Script]
-http-request ^http:\/\/cp\.cloudflare\.com\/loon-bridge script-path=https://raw.githubusercontent.com/BeThyself/scripting/refs/heads/main/DashBoard-Kit/loon_dashboard_bridge.js,timeout=10,tag=LoonDashboardBridge,enable=true
-http-request ^http:\/\/1\.1\.1\.1\/loon-bridge script-path=https://raw.githubusercontent.com/BeThyself/scripting/refs/heads/main/DashBoard-Kit/loon_dashboard_bridge.js,timeout=10,tag=LoonDashboardBridgeIP,enable=true
-http-request ^http:\/\/loon\.(lan|local)\/api script-path=https://raw.githubusercontent.com/BeThyself/scripting/refs/heads/main/DashBoard-Kit/loon_dashboard_bridge.js,timeout=10,tag=LoonDashboardBridgeLocal,enable=true
+http-request ^http:\/\/cp\.cloudflare\.com\/loon-bridge script-path=https://raw.githubusercontent.com/BeThyself/scripting/refs/heads/main/DashBoard-Kit/loon_dashboard_bridge.js?v=2,timeout=20,tag=LoonDashboardBridge,enable=true
+http-request ^http:\/\/1\.1\.1\.1\/loon-bridge script-path=https://raw.githubusercontent.com/BeThyself/scripting/refs/heads/main/DashBoard-Kit/loon_dashboard_bridge.js?v=2,timeout=20,tag=LoonDashboardBridgeIP,enable=true
+http-request ^http:\/\/loon\.(lan|local)\/api script-path=https://raw.githubusercontent.com/BeThyself/scripting/refs/heads/main/DashBoard-Kit/loon_dashboard_bridge.js?v=2,timeout=20,tag=LoonDashboardBridgeLocal,enable=true
