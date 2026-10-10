@@ -71,6 +71,32 @@ function toArray(v) {
   return null;
 }
 
+/** getSubPolicys 返回的是 [{type, name}]，统一转成名字字符串数组 */
+function normalizeSubList(list) {
+  const out = [];
+  if (!Array.isArray(list)) return out;
+  for (let i = 0; i < list.length; i++) {
+    const it = list[i];
+    if (typeof it === "string") out.push(it);
+    else if (it && typeof it === "object") {
+      const nm = it.name || it.policy || it.title;
+      if (nm) out.push(String(nm));
+    }
+  }
+  return out;
+}
+
+/** Loon 会把 DIRECT/REJECT 这类内置策略排在候选列表最前面，
+ *  策略组未显式选择时真正生效的是配置里声明的第一个成员（即跳过去除内置项后的第一个）。 */
+const BUILTIN_POLICIES = ["DIRECT", "REJECT", "REJECT-DROP", "REJECT-TINYGIF", "REJECT-NO-DROP", "PROXY"];
+function inferSelection(list) {
+  for (let i = 0; i < list.length; i++) {
+    const up = String(list[i]).trim().toUpperCase();
+    if (BUILTIN_POLICIES.indexOf(up) < 0) return list[i];
+  }
+  return list.length > 0 ? list[0] : null;
+}
+
 function brief(v) {
   try {
     if (v === undefined) return "undefined";
@@ -248,23 +274,36 @@ function readSelectedPolicy(policyName) {
       }
     }
 
-    // 5. 取策略组候选子策略
+    // 5. 取策略组候选子策略（默认取全部策略组，上限 20 个组、每组 30 个候选）
     const subTimeout = Number(query.sub_timeout) > 0 ? Number(query.sub_timeout) : 2500;
     const wantGroups = query.groups
       ? query.groups.split("|")
       : query.group
         ? [query.group]
-        : allPolicyGroups.slice(0, 8);
+        : allPolicyGroups.slice(0, 20);
     const subPoliciesMap = {};
     const subDebug = {};
 
     await Promise.all(wantGroups.map(async function (gName) {
       if (!gName) return;
       const dbg = [];
-      const list = await getSubPoliciesAsync(gName, subTimeout, dbg);
+      const raw = await getSubPoliciesAsync(gName, subTimeout, dbg);
+      const list = normalizeSubList(raw).slice(0, 30);
       subDebug[gName] = { count: list.length, api: dbg.join(" → ") };
-      if (list && list.length > 0) subPoliciesMap[gName] = list.slice(0, 60);
+      if (list.length > 0) subPoliciesMap[gName] = list;
     }));
+
+    // 6. 对于 Loon 没记录选中值的策略组（getPolicy / getSelectedPolicy 都返回 null），
+    //    用「跳过 DIRECT/REJECT 后的第一个成员」作为实际生效值的推断
+    const inferredPolicySelect = {};
+    for (const g in subPoliciesMap) {
+      if (policySelect[g]) continue;
+      const guess = inferSelection(subPoliciesMap[g]);
+      if (guess) {
+        policySelect[g] = guess;
+        inferredPolicySelect[g] = guess;
+      }
+    }
 
     const responseData = {
       ok: true,
@@ -273,6 +312,7 @@ function readSelectedPolicy(policyName) {
       running_mode: runningModeStr,
       policy_select: policySelect,
       selected_policy_filled: filledPolicySelect,
+      selected_policy_inferred: inferredPolicySelect,
       selected_policy_probe: probeResults,
       sub_policies: subPoliciesMap,
       sub_debug: subDebug,
