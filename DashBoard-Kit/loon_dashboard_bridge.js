@@ -129,6 +129,30 @@ function getSubPoliciesAsync(policyName, timeoutMs) {
       ? configObj.all_policy_groups
       : Object.keys(policySelect);
 
+    // 3.5 补齐 policy_select —— Loon 的 getConfig() 只会返回一部分策略组，
+    // 缺失的组用 $config.getSelectedPolicy(name) 逐个查回来
+    const filledPolicySelect = {};
+    try {
+      if (typeof $config !== "undefined" && typeof $config.getSelectedPolicy === "function") {
+        const fillTimeoutAt = Date.now() + 2500;
+        for (let i = 0; i < allPolicyGroups.length && i < 40; i++) {
+          const g = allPolicyGroups[i];
+          if (!g || policySelect[g]) continue;
+          if (Date.now() > fillTimeoutAt) break;
+          try {
+            const v = $config.getSelectedPolicy(g);
+            let name = "";
+            if (typeof v === "string") name = v;
+            else if (v && typeof v === "object") name = v.name || v.policy || v.selected || "";
+            if (name) {
+              policySelect[g] = String(name);
+              filledPolicySelect[g] = String(name);
+            }
+          } catch (e) {}
+        }
+      }
+    } catch (e) {}
+
     // 4. 获取策略组的候选子节点列表（并行，单个 2.5s 超时，并回传调试信息）
     const subTimeout = Number(query.sub_timeout) > 0 ? Number(query.sub_timeout) : 2500;
     const wantGroup = query.group || "";
@@ -160,6 +184,7 @@ function getSubPoliciesAsync(policyName, timeoutMs) {
       running_model: runningModelNum,
       running_mode: runningModeStr,
       policy_select: policySelect,
+      selected_policy_filled: filledPolicySelect,
       sub_policies: subPoliciesMap,
       sub_debug: subDebug,
       all_policy_groups: allPolicyGroups,
