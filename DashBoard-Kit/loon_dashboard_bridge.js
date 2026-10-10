@@ -1,12 +1,17 @@
 /**
  * Loon DashBoard-Kit 桌面交互小组件 本地 OpenAPI 桥接脚本
- * 用于响应 http://loon.lan/api 或 http://loon.local/api 请求
+ *
+ * 触发方式（插件里已配好三条规则，任选其一命中即可）：
+ *   http://cp.cloudflare.com/loon-bridge
+ *   http://1.1.1.1/loon-bridge            ← 无 DNS 依赖，最稳，实测可用
+ *   http://loon.lan/api
  *
  * 支持参数：
  * - action: "status" | "set_mode" | "set_policy"
  * - mode: "direct" | "filter" | "proxy" 或 0 | 1 | 2
  * - policy: 策略组名称 (例如 "节点选择")
- * - node: 目标节点名称 (例如 "🇭🇰 香港 01")
+ * - node: 目标节点名称
+ * - group: 只探查指定策略组的候选节点
  */
 
 function parseQuery(urlStr) {
@@ -31,30 +36,34 @@ function parseQuery(urlStr) {
   return query;
 }
 
-function getSubPoliciesAsync(policyName) {
+function getSubPoliciesAsync(policyName, timeoutMs) {
   return new Promise((resolve) => {
+    const started = Date.now();
     try {
-      if (typeof $config !== "undefined" && typeof $config.getSubPolicies === "function") {
-        let finished = false;
-        const timer = setTimeout(() => {
-          if (!finished) {
-            finished = true;
-            resolve([]);
-          }
-        }, 600);
-
-        $config.getSubPolicies(policyName, (subPolicies) => {
-          if (!finished) {
-            finished = true;
-            clearTimeout(timer);
-            resolve(Array.isArray(subPolicies) ? subPolicies : []);
-          }
-        });
-      } else {
-        resolve([]);
+      if (typeof $config === "undefined" || typeof $config.getSubPolicies !== "function") {
+        resolve({ fired: false, list: [], ms: 0, note: "$config.getSubPolicies 不可用" });
+        return;
       }
+      let finished = false;
+      const timer = setTimeout(() => {
+        if (!finished) {
+          finished = true;
+          resolve({ fired: false, list: [], ms: Date.now() - started });
+        }
+      }, timeoutMs);
+
+      // 不同版本回调签名可能是 (list) 或 (name, list)，这里两种都兼容
+      $config.getSubPolicies(policyName, function (a, b) {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        let arr = [];
+        if (Array.isArray(a)) arr = a;
+        else if (Array.isArray(b)) arr = b;
+        resolve({ fired: true, list: arr, ms: Date.now() - started });
+      });
     } catch (e) {
-      resolve([]);
+      resolve({ fired: false, list: [], ms: Date.now() - started, note: String(e) });
     }
   });
 }
@@ -120,15 +129,21 @@ function getSubPoliciesAsync(policyName) {
       ? configObj.all_policy_groups
       : Object.keys(policySelect);
 
-    // 4. 获取主要策略组的候选子节点列表 (取前 6 个或指定的策略组)
-    const targetGroups = allPolicyGroups.slice(0, 6);
+    // 4. 获取策略组的候选子节点列表（并行，单个 2.5s 超时，并回传调试信息）
+    const subTimeout = Number(query.sub_timeout) > 0 ? Number(query.sub_timeout) : 2500;
+    const wantGroup = query.group || "";
+    const targetGroups = wantGroup
+      ? [wantGroup]
+      : allPolicyGroups.slice(0, 8);
     const subPoliciesMap = {};
+    const subDebug = {};
 
     await Promise.all(
       targetGroups.map(async (gName) => {
-        const subs = await getSubPoliciesAsync(gName);
-        if (subs && subs.length > 0) {
-          subPoliciesMap[gName] = subs;
+        const r = await getSubPoliciesAsync(gName, subTimeout);
+        subDebug[gName] = { fired: r.fired, ms: r.ms, count: r.list.length, note: r.note || "" };
+        if (r.list && r.list.length > 0) {
+          subPoliciesMap[gName] = r.list.slice(0, 40);
         }
       })
     );
@@ -146,6 +161,7 @@ function getSubPoliciesAsync(policyName) {
       running_mode: runningModeStr,
       policy_select: policySelect,
       sub_policies: subPoliciesMap,
+      sub_debug: subDebug,
       all_policy_groups: allPolicyGroups,
       ssid: configObj.ssid || "",
       final: configObj.final || "",
