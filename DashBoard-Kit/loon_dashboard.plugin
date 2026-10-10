@@ -1,0 +1,12 @@
+#!name = Loon DashBoard-Kit 交互小组件
+#!desc = 为 DashBoard-Kit iOS 桌面小组件提供本地 OpenAPI 桥接，支持在桌面直接切换 Loon 运行模式与策略组节点，并读取实时配置状态。
+#!author = SylvanRoe & BeThyself
+#!homepage = https://github.com/BeThyself/scripting
+#!icon = https://raw.githubusercontent.com/Loon0x00/Loon0x00.github.io/main/static/img/loon.png
+#!date = 2026-10-11 00:00:00
+#!tag = 工具,小组件,面板
+#!system = iOS,iPadOS,macOS
+#!type = normal
+
+[Script]
+http-request ^http:\/\/loon\.(lan|local)\/api script-path=https://raw.githubusercontent.com/BeThyself/scripting/refs/heads/main/DashBoard-Kit/loon_dashboard_bridge.js,timeout=10,tag=LoonDashboardBridge,enable=true
