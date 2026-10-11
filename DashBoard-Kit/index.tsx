@@ -40,6 +40,13 @@ import {
   FUEL_OIL_KEY,
   FUEL_PROVINCE_KEY,
   FUEL_PROVINCE_MAP,
+  LOON_BRIDGE_URL_KEY,
+  LOON_CACHE_KEY,
+  LOON_PLUGIN_GUIDE_TEXT,
+  LOON_POLICIES_KEY,
+  LOON_POLICY_OVERRIDES_KEY,
+  LOON_SUB_NAME_KEY,
+  LOON_SUB_URL_KEY,
   QB_CACHE_KEY,
   QB_PASS_KEY,
   QB_SID_KEY,
@@ -55,11 +62,14 @@ import {
   WB_API_KEY,
   WB_ENDPOINT_KEY,
   getMediaType,
+  getLoonData,
   getQxData,
+  getQxSettings,
   hasAntigravityConfigured,
   hasCodexConfigured,
   hasCpampConfigured,
   hasDeepSeekConfigured,
+  hasLoonConfigured,
   hasMediaConfigured,
   hasQbConfigured,
   hasQxConfigured,
@@ -71,11 +81,15 @@ import {
   refreshDeepSeekData,
   refreshEmbyData,
   refreshFuelData,
+  refreshLoonData,
   refreshMediaData,
   refreshQbittorrentData,
   refreshQxData,
   refreshVpnData,
   refreshWorkBuddyData,
+  saveQxSettings,
+  switchLoonPolicyNode,
+  switchLoonRunningMode,
   switchQxPolicyNode,
   switchQxRunningMode,
 } from "./data"
@@ -92,6 +106,7 @@ import {
   DEFAULT_CODEX,
   DEFAULT_WORKBUDDY,
   DEEPSEEK_WHALE_SVG,
+  LOON_LOGO_IMAGE,
   QB_LOGO_IMAGE,
   QX_LOGO_IMAGE,
   WIDGET_OPTIONS,
@@ -1008,7 +1023,7 @@ async function configureQuantumultX() {
   }
 
   if (choice === 1) {
-    const curSub = Keychain.contains(QX_SUB_URL_KEY) ? Keychain.get(QX_SUB_URL_KEY) || "" : ""
+    const curSub = getQxSettings().subUrl || ""
     const subUrl = await gPrompt({
       title: "配置 Quantumult X · 机场订阅地址",
       message: "请输入机场订阅链接（用于解析响应头 subscription-userinfo 中的真实剩余流量与到期时间）：",
@@ -1020,13 +1035,7 @@ async function configureQuantumultX() {
     })
     if (subUrl === null) return
 
-    if (subUrl.trim()) {
-      Keychain.set(QX_SUB_URL_KEY, subUrl.trim(), {
-        accessibility: "first_unlock_this_device",
-      })
-    } else {
-      Keychain.remove(QX_SUB_URL_KEY)
-    }
+    saveQxSettings({ subUrl: subUrl.trim() })
 
     const res = await refreshQxData()
     Widget.reloadAll()
@@ -1039,25 +1048,19 @@ async function configureQuantumultX() {
   }
 
   if (choice === 2) {
-    const curCustom = Keychain.contains(QX_POLICIES_KEY) ? Keychain.get(QX_POLICIES_KEY) || "" : ""
+    const curCustom = getQxSettings().customPolicies || ""
     const defaultStr = curCustom || (currentData.policies || []).map((p) => p.id).join(", ")
     const input = await gPrompt({
       title: "自定义展示的 4 个策略组",
       message:
-        "请输入你在圈X中的策略组名称（最多 4 个，用逗号分隔，留空则自动匹配如 proxy, 全球加速, 国际媒体, 苹果服务）：",
+        "请输入你在圈X中的策略组名称（最多 4 个，用逗号分隔，支持模糊匹配如：proxy, 哔哩哔哩, 国际媒体, 苹果服务；留空则恢复默认排序）：",
       defaultValue: defaultStr,
       placeholder: "proxy, 全球加速, 国际媒体, 苹果服务",
       confirmLabel: "保存并同步",
       cancelLabel: "取消",
     })
     if (input === null) return
-    if (input.trim()) {
-      Keychain.set(QX_POLICIES_KEY, input.trim(), {
-        accessibility: "first_unlock_this_device",
-      })
-    } else {
-      Keychain.remove(QX_POLICIES_KEY)
-    }
+    saveQxSettings({ customPolicies: input.trim() })
     const res = await refreshQxData()
     Widget.reloadAll()
     if (res) {
@@ -1105,6 +1108,134 @@ async function configureQuantumultX() {
   }
 }
 
+/** 引导配置 Loon（OpenAPI 本地桥接 + 机场订阅流量 + 桌面交互测试）*/
+async function configureLoon() {
+  const currentData = getLoonData()
+  const choice = await Dialog.actionSheet({
+    title: "配置 Loon (桌面交互联动)",
+    message: `当前运行模式：${currentData.runningModeLabel} · 剩余流量：${currentData.remainGb}\n桥接状态：${currentData.bridgeConnected ? "已连接" : "未连接"}`,
+    cancelButton: true,
+    actions: [
+      { label: "📋 一键复制 Loon 插件与桥接脚本地址" },
+      { label: "🔗 配置机场订阅链接 (获取真实流量/到期)" },
+      { label: "🎛 自定义卡片展示的 4 个策略组" },
+      { label: "🔄 立即切换运行模式 (分流/全局代理/直连)" },
+      { label: "🎯 立即测试切换策略组节点" },
+      { label: "⚡️ 立即同步状态并刷新小组件" },
+    ],
+  })
+  if (choice === null || choice === undefined || choice < 0) return
+
+  if (choice === 0) {
+    const pluginUrl =
+      "https://raw.githubusercontent.com/BeThyself/scripting/refs/heads/main/DashBoard-Kit/loon_dashboard.plugin"
+    try {
+      await Pasteboard.setString(pluginUrl)
+    } catch {}
+    await gAlert(
+      `✓ 远程插件链接已复制到剪贴板！\n\n${pluginUrl}\n\n直接打开 Loon →「插件 (Plugin)」→ 右上角 ➕ → 添加插件，粘贴该远程链接并启用即可。\n\n【重要】桥接地址用的是能正常解析的 cp.cloudflare.com/loon-bridge，不要再改成 loon.lan 这类假域名 —— 假域名会 DNS 失败，请求根本形成不了，脚本永远不触发。`
+    )
+    return
+  }
+
+  if (choice === 1) {
+    const curSub = Keychain.contains(LOON_SUB_URL_KEY) ? Keychain.get(LOON_SUB_URL_KEY) || "" : ""
+    const subUrl = await gPrompt({
+      title: "配置 Loon · 机场订阅地址",
+      message: "请输入机场订阅链接（用于解析响应头 subscription-userinfo 中的真实剩余流量与到期时间）：",
+      defaultValue: curSub,
+      placeholder: "https://sub.example.com/api/v1/client/subscribe?token=...",
+      keyboardType: "URL",
+      confirmLabel: "保存并同步",
+      cancelLabel: "取消",
+    })
+    if (subUrl === null) return
+
+    if (subUrl.trim()) {
+      Keychain.set(LOON_SUB_URL_KEY, subUrl.trim(), {
+        accessibility: "first_unlock_this_device",
+      })
+    } else {
+      Keychain.remove(LOON_SUB_URL_KEY)
+    }
+
+    const res = await refreshLoonData()
+    Widget.reloadAll()
+    if (res) {
+      await gAlert(
+        `✓ 订阅配置已更新！\n\n剩余流量：${res.remainGb} (${res.remainPct}%)\n已用/总计：${res.usedGb} / ${res.totalGb}\n周期状态：${res.expireText}\n\n桌面小组件已同步生效！`
+      )
+    }
+    return
+  }
+
+  if (choice === 2) {
+    const curCustom = Keychain.contains(LOON_POLICIES_KEY) ? Keychain.get(LOON_POLICIES_KEY) || "" : ""
+    const defaultStr = curCustom || (currentData.policies || []).map((p) => p.id).join(", ")
+    const input = await gPrompt({
+      title: "自定义展示的 4 个策略组",
+      message:
+        "请输入你在 Loon 中的策略组名称（最多 4 个，用逗号分隔，留空则自动匹配如 节点选择、国外网站、苹果服务、漏网之鱼）：",
+      defaultValue: defaultStr,
+      placeholder: "节点选择, 国外网站, 苹果服务, 漏网之鱼",
+      confirmLabel: "保存并同步",
+      cancelLabel: "取消",
+    })
+    if (input === null) return
+    if (input.trim()) {
+      Keychain.set(LOON_POLICIES_KEY, input.trim(), {
+        accessibility: "first_unlock_this_device",
+      })
+    } else {
+      Keychain.remove(LOON_POLICIES_KEY)
+    }
+    const res = await refreshLoonData()
+    Widget.reloadAll()
+    if (res) {
+      await gAlert(
+        `✓ 已更新展示策略组：\n${res.policies.map((p) => `• ${p.label}（${p.selected}）`).join("\n")}`
+      )
+    }
+    return
+  }
+
+  if (choice === 3) {
+    const next = await switchLoonRunningMode()
+    Widget.reloadAll()
+    await gAlert(`✓ 已切换运行模式为：【${next.runningModeLabel}】\n桌面小组件已同步更新！`)
+    return
+  }
+
+  if (choice === 4) {
+    const policies = currentData.policies || []
+    const pIdx = await Dialog.actionSheet({
+      title: "选择要切换节点的策略组",
+      message: "在桌面小组件上直接点击对应策略组卡片也可实现同样效果",
+      cancelButton: true,
+      actions: policies.map((p) => ({ label: `${p.label}（当前：${p.selected}）` })),
+    })
+    if (pIdx === null || pIdx === undefined || pIdx < 0 || pIdx >= policies.length) return
+    const targetP = policies[pIdx]
+    const updated = await switchLoonPolicyNode(targetP.id)
+    Widget.reloadAll()
+    const afterP = updated.policies.find((x) => x.id === targetP.id)
+    await gAlert(
+      `✓ 策略组【${targetP.label}】已切换节点：\n${targetP.selected}  ➔  ${afterP?.selected}\n\n桌面小组件已同步更新！`
+    )
+    return
+  }
+
+  if (choice === 5) {
+    const res = await refreshLoonData()
+    Widget.reloadAll()
+    if (res) {
+      await gAlert(
+        `✓ Loon 状态已同步！\n\n桥接：${res.bridgeConnected ? "已连接 🟢" : "未连接 🟠（" + (res.bridgeError || "未知") + "）"}\n运行模式：${res.runningModeLabel}\n当前出口：${res.outboundTag} (${res.latencyMs})\n剩余流量：${res.remainGb} (${res.remainPct}%)\n主力节点：${res.policies[0]?.selected || "--"}`
+      )
+    }
+  }
+}
+
 export default function ConfigView() {
   const dismiss = Navigation.useDismiss()
   const hasMedia = hasMediaConfigured()
@@ -1116,6 +1247,7 @@ export default function ConfigView() {
   const hasCpamp = hasCpampConfigured()
   const hasQb = hasQbConfigured()
   const hasQx = hasQxConfigured()
+  const hasLoon = hasLoonConfigured()
 
   useEffect(() => {
     // 首次进入设置面板后 500ms 轻量触发
@@ -1162,6 +1294,34 @@ export default function ConfigView() {
               controlSize="mini"
               action={async () => {
                 await configureQuantumultX()
+              }}
+            />
+          </HStack>
+          <HStack spacing={10} alignment="center">
+            <Image
+              systemName="circle.fill"
+              font={{ name: "system", size: 8 }}
+              foregroundStyle={hasLoon ? "#10B981" : "#F59E0B"}
+            />
+            <VStack alignment="leading" spacing={2}>
+              <Text font={14} fontWeight="medium">Loon (桌面交互联动)</Text>
+              <Text font={11} foregroundStyle={C_SUBTITLE}>
+                {(() => {
+                  const d = getLoonData()
+                  if (!d.bridgeConnected) {
+                    return `⚠️ 桥接未连接：${d.bridgeError || "未知原因"}`
+                  }
+                  return `已连接 · ${d.runningModeLabel} · ${d.bridgeError ? "" : ""}共 ${d.policyGroupCount || "0"} 个策略组`
+                })()}
+              </Text>
+            </VStack>
+            <Spacer />
+            <Button
+              title={hasLoon ? "已配置 · 管理" : "桥接与配置"}
+              buttonStyle="bordered"
+              controlSize="mini"
+              action={async () => {
+                await configureLoon()
               }}
             />
           </HStack>
@@ -1421,6 +1581,7 @@ export default function ConfigView() {
                   if (hasCpamp) tasks.push(refreshCpampData().catch((e) => console.log("cpamp err:", e)))
                   if (hasQb) tasks.push(refreshQbittorrentData().catch((e) => console.log("qb err:", e)))
                   tasks.push(refreshQxData().catch((e) => console.log("qx err:", e)))
+                  tasks.push(refreshLoonData().catch((e) => console.log("loon err:", e)))
                   tasks.push(refreshVpnData().catch((e) => console.log("vpn err:", e)))
                   tasks.push(refreshFuelData().catch((e) => console.log("fuel err:", e)))
 
@@ -1519,6 +1680,8 @@ export default function ConfigView() {
                     await refreshQbittorrentData().catch(() => null)
                   } else if (opt.id === "qx" || opt.id === "qx_traffic") {
                     await refreshQxData().catch(() => null)
+                  } else if (opt.id === "loon" || opt.id === "loon_traffic") {
+                    await refreshLoonData().catch(() => null)
                   } else if (opt.id === "media") {
                     await refreshMediaData().catch(() => null)
                   }
@@ -1544,6 +1707,22 @@ export default function ConfigView() {
                     previewFamily = chosen.includes("小号") ? "systemSmall" : "systemMedium"
                   } else if (opt.id === "qx_traffic") {
                     const chosen = await gActionSheet("请选择 Quantumult X (流量统计) 预览尺寸", [
+                      "中号组件 (上下行累计 + 四宫格核心指标)",
+                      "小号组件 (精简上下行累计 + 延迟)",
+                      "取消",
+                    ])
+                    if (!chosen || chosen === "取消") return
+                    previewFamily = chosen.includes("小号") ? "systemSmall" : "systemMedium"
+                  } else if (opt.id === "loon") {
+                    const chosen = await gActionSheet("请选择 Loon 预览尺寸", [
+                      "中号组件 (流量监控 + 2x2 策略组桌面直切矩阵)",
+                      "小号组件 (精简模式切换 + 主力策略组 + 流量)",
+                      "取消",
+                    ])
+                    if (!chosen || chosen === "取消") return
+                    previewFamily = chosen.includes("小号") ? "systemSmall" : "systemMedium"
+                  } else if (opt.id === "loon_traffic") {
+                    const chosen = await gActionSheet("请选择 Loon (流量统计) 预览尺寸", [
                       "中号组件 (上下行累计 + 四宫格核心指标)",
                       "小号组件 (精简上下行累计 + 延迟)",
                       "取消",

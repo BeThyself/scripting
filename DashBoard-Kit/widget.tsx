@@ -2,6 +2,8 @@ import { Widget } from "scripting"
 import {
   DualQuotaCard,
   FuelPriceCard,
+  LoonCard,
+  LoonTrafficCard,
   MediaNexusCard,
   MetricBalanceCard,
   QbittorrentCard,
@@ -15,6 +17,7 @@ import {
   getCpampData,
   getDeepSeekData,
   getFuelData,
+  getLoonData,
   getMediaNexusData,
   getQbittorrentData,
   getQxData,
@@ -25,6 +28,7 @@ import {
   refreshCpampData,
   refreshDeepSeekData,
   refreshFuelData,
+  refreshLoonData,
   refreshMediaData,
   refreshQbittorrentData,
   refreshQxData,
@@ -88,6 +92,14 @@ export function getWidgetView(paramOverride?: string, familyOverride?: string) {
   else if (target.includes("qbittorrent") || target.includes("qb") || target.includes("qbit")) param = "qbittorrent"
   else if (target.includes("fuel") || target.includes("oil") || target.includes("油价")) param = "fuel"
   else if (
+    target === "loon_traffic" ||
+    target === "loon2" ||
+    target.includes("loon-traffic") ||
+    target.includes("loontraffic") ||
+    target.includes("loon流量")
+  )
+    param = "loon_traffic"
+  else if (
     target === "qx_traffic" ||
     target === "qx2" ||
     target.includes("qx-traffic") ||
@@ -96,10 +108,15 @@ export function getWidgetView(paramOverride?: string, familyOverride?: string) {
     target.includes("qx流量")
   )
     param = "qx_traffic"
+  else if (target.includes("loon")) param = "loon"
   else if (target.includes("qx") || target.includes("quantumult") || target.includes("圈x")) param = "qx"
 
   // 1. 如果传入参数是指定 id
-  if (param === "qx_traffic") {
+  if (param === "loon_traffic") {
+    return <LoonTrafficCard data={getLoonData()} family={family} />
+  } else if (param === "loon") {
+    return <LoonCard data={getLoonData()} family={family} />
+  } else if (param === "qx_traffic") {
     return <QuantumultXTrafficCard data={getQxData()} family={family} />
   } else if (param === "qx") {
     return <QuantumultXCard data={getQxData()} family={family} />
@@ -171,6 +188,13 @@ async function main() {
       await refreshQbittorrentData().catch(() => null)
     } else if (p.includes("fuel") || p.includes("oil") || p.includes("油价")) {
       await refreshFuelData().catch(() => null)
+    } else if (p.includes("loon")) {
+      // 如果刚在桌面点击了切换模式/节点（8秒内已更新缓存），跳过耗时网络请求，直接秒级渲染 UI
+      const curLoon = getLoonData()
+      const elapsed = Date.now() - (Date.parse(curLoon.updatedAt || "") || 0)
+      if (elapsed > 8000) {
+        await refreshLoonData().catch(() => null)
+      }
     } else if (p.includes("qx") || p.includes("quantumult") || p.includes("圈x")) {
       // 如果刚在桌面点击了切换模式/节点（8秒内已更新缓存），跳过耗时网络请求，直接秒级渲染 UI
       const curQx = getQxData()
