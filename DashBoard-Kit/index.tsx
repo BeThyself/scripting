@@ -194,6 +194,9 @@ function OptionBrandIcon({ id }: { id: string }) {
   if (id === "qx" || id === "qx_traffic") {
     return <BrandHeaderIcon iconImage={QX_LOGO_IMAGE} size={20} />
   }
+  if (id === "loon" || id === "loon_traffic") {
+    return <BrandHeaderIcon iconImage={LOON_LOGO_IMAGE} size={20} />
+  }
   if (id === "vpn") {
     return (
       <Image
