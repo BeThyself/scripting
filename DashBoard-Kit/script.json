@@ -19,7 +19,7 @@
     "en" : "Multi-dashboard kit with unified settings and customizable widget parameters.",
     "zh" : "多组件看板套件：同一后台配置管理，支持方案A桌面参数切换多种看板"
   },
-  "description" : "多组件看板套件：同一后台配置管理，支持方案A桌面参数切换多种看板（Quantumult X、Media Nexus、DeepSeek、Codex、Antigravity、WorkBuddy、CPAMP、qBittorrent、今日油价等）",
+  "description" : "多组件看板套件（含 Loon 交互小组件定制版）：同一后台配置管理，支持方案A桌面参数切换多种看板（Loon、Quantumult X、Media Nexus、DeepSeek、Codex、Antigravity、WorkBuddy、CPAMP、qBittorrent、今日油价等）",
   "author" : {
     "name" : "SylvanRoe",
     "email" : "SylvanRoe@gmail.com",
