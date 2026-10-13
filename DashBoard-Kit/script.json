@@ -13,7 +13,7 @@
   "name": "DashBoard-Kit",
   "remoteResource": {
     "url": "https://github.com/BeThyself/scripting/raw/refs/heads/main/DashBoard-Kit/DashBoard-Kit.scripting",
-    "hash": "79c07a0126616b7ef301b2b97ae0ea56",
+    "hash": "85ab6ffd7a6b7bb4ae012a10afb72007",
     "autoUpdateInterval": 3600
   },
   "permissions": null,

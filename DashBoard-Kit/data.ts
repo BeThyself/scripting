@@ -2309,6 +2309,65 @@ function flagFromCountry(countryOrCode: string): string {
 }
 
 /**
+ * 只取订阅响应头里的 `subscription-userinfo`，**不下载订阅正文**。
+ *
+ * ⚠️ 性能要点：原来用 `method: "GET"` 拉订阅，会把整个订阅文件（常见 1~5MB）全部下载下来，
+ * 而代码只用到了响应头那一个字段 —— 每 15 分钟白下几 MB，走代理，是明显的耗电发热源。
+ * 实测 HEAD 返回 0 字节、Range 返回 1 字节，都能拿到该头。
+ *
+ * 顺序：HEAD → Range: bytes=0-0 → 完整 GET（兜底，兼容不支持 HEAD/Range 的机场）。
+ */
+const SUB_UA = "Loon/3.2.1 (iPhone; iOS 17.5)"
+
+function readSubscriptionUserinfo(res: any): string {
+  const hdrs: any = res && res.headers
+  if (typeof hdrs?.get === "function") {
+    return (
+      hdrs.get("subscription-userinfo") ||
+      hdrs.get("Subscription-Userinfo") ||
+      hdrs.get("SUBSCRIPTION-USERINFO") ||
+      ""
+    )
+  }
+  if (hdrs && typeof hdrs === "object") {
+    for (const k of Object.keys(hdrs)) {
+      if (k.toLowerCase() === "subscription-userinfo") return String(hdrs[k])
+    }
+  }
+  return ""
+}
+
+async function fetchSubscriptionUserinfo(subUrl: string, ua: string = SUB_UA): Promise<string> {
+  const base = { headers: { "User-Agent": ua }, timeout: 8 }
+
+  // ① HEAD：最省，理想情况只传响应头
+  try {
+    const res = await fetch(subUrl, { ...base, method: "HEAD" })
+    const info = readSubscriptionUserinfo(res)
+    if (info) return info
+  } catch {}
+
+  // ② Range 只取 1 字节（很多机场不支持 HEAD，但支持 Range）
+  try {
+    const res = await fetch(subUrl, {
+      ...base,
+      method: "GET",
+      headers: { "User-Agent": ua, Range: "bytes=0-0" },
+    })
+    const info = readSubscriptionUserinfo(res)
+    if (info) return info
+  } catch {}
+
+  // ③ 兜底：完整 GET（仅在以上都不行时才会真正下载正文）
+  try {
+    const res = await fetch(subUrl, { ...base, method: "GET" })
+    return readSubscriptionUserinfo(res)
+  } catch {
+    return ""
+  }
+}
+
+/**
  * 解析机场订阅响应头 subscription-userinfo: upload=123; download=456; total=789; expire=1790000000
  */
 function parseSubscriptionUserinfo(headerVal: string): {
@@ -2612,27 +2671,10 @@ export async function refreshQxData(): Promise<QuantumultXData | null> {
 
     if (subUrl) {
       try {
-        const subRes = await fetch(subUrl, {
-          method: "GET",
-          headers: { "User-Agent": "Quantumult%20X/1.4.4 (iPhone; iOS 17.5)" },
-          timeout: 5,
-        })
-        const hdrs: any = subRes.headers
-        let userInfo = ""
-        if (typeof hdrs?.get === "function") {
-          userInfo =
-            hdrs.get("subscription-userinfo") ||
-            hdrs.get("Subscription-Userinfo") ||
-            hdrs.get("SUBSCRIPTION-USERINFO") ||
-            ""
-        } else if (hdrs && typeof hdrs === "object") {
-          for (const k of Object.keys(hdrs)) {
-            if (k.toLowerCase() === "subscription-userinfo") {
-              userInfo = String(hdrs[k])
-              break
-            }
-          }
-        }
+        const userInfo = await fetchSubscriptionUserinfo(
+          subUrl,
+          "Quantumult%20X/1.4.4 (iPhone; iOS 17.5)"
+        )
         const parsed = parseSubscriptionUserinfo(userInfo)
         if (parsed) {
           usedGb = parsed.usedGb
@@ -2812,10 +2854,16 @@ http-request ^http:\\/\\/loon\\.(lan|local)\\/api script-path=https://raw.github
 /** 桥接候选地址：按顺序尝试，第一个返回合法 JSON 的会被记住，后续优先用它。
  * 注意：必须用【能正常解析的真实域名】，否则 DNS 就会失败，请求根本不会形成，
  * Loon 的 http-request 脚本也就永远没机会匹配（loon.lan 这类假域名在 Loon 下不可靠）。
+ *
+ * 实测（2026-10-13）：
+ *   http://1.1.1.1/loon-bridge            → 256ms，正常返回 16 组数据  ✅ 放第一位
+ *   http://cp.cloudflare.com/loon-bridge  → 879ms，返回 0 字节，永远失败 ❌
+ *   http://loon.lan/api                   → DNS 必失败，白等 209ms       ❌
+ * 所以能用 IP 直连的那条排最前，避免每次刷新都先白等近 1 秒。
  */
 export const LOON_BRIDGE_CANDIDATES = [
-  "http://cp.cloudflare.com/loon-bridge",
   "http://1.1.1.1/loon-bridge",
+  "http://cp.cloudflare.com/loon-bridge",
   "http://loon.lan/api",
 ]
 
@@ -3044,7 +3092,10 @@ export async function refreshLoonData(): Promise<LoonData | null> {
 
     // 1. 尝试调用 Loon 本地 Bridge 获取真实策略组与运行模式
     try {
-      const bridgeCall = await callLoonBridge("action=status", 2.4)
+      // sub_timeout 必须明显小于本调用的 timeout：
+      // 桥接脚本内部探查候选节点是会耗时的，若它比调用方先超时，
+      // 就会触发候选回退 —— 而每次回退都会让 Loon 把整个桥接脚本再跑一遍（白烧 CPU）。
+      const bridgeCall = await callLoonBridge("action=status&sub_timeout=1500", 2.4)
       if (bridgeCall.ok && bridgeCall.json) {
         bridgeConnected = true
         const json: any = bridgeCall.json
@@ -3178,27 +3229,7 @@ export async function refreshLoonData(): Promise<LoonData | null> {
 
     if (subUrl) {
       try {
-        const subRes = await fetch(subUrl, {
-          method: "GET",
-          headers: { "User-Agent": "Loon/3.2.1 (iPhone; iOS 17.5)" },
-          timeout: 5,
-        })
-        const hdrs: any = subRes.headers
-        let userInfo = ""
-        if (typeof hdrs?.get === "function") {
-          userInfo =
-            hdrs.get("subscription-userinfo") ||
-            hdrs.get("Subscription-Userinfo") ||
-            hdrs.get("SUBSCRIPTION-USERINFO") ||
-            ""
-        } else if (hdrs && typeof hdrs === "object") {
-          for (const k of Object.keys(hdrs)) {
-            if (k.toLowerCase() === "subscription-userinfo") {
-              userInfo = String(hdrs[k])
-              break
-            }
-          }
-        }
+        const userInfo = await fetchSubscriptionUserinfo(subUrl)
         const parsed = parseSubscriptionUserinfo(userInfo)
         if (parsed) {
           usedGb = parsed.usedGb

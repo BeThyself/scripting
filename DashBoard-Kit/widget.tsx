@@ -36,6 +36,16 @@ import {
   refreshWorkBuddyData,
 } from "./data"
 
+// ── 刷新节奏（发热/耗电主要取决于这里）────────────────────────────
+// 系统 timeline 自动刷新间隔。iOS 只是「不早于」这个时间才可能唤醒，实际往往更晚。
+// 想更省电就调大（如 60），想更实时就调小（如 10，但会明显增加后台网络活动）。
+const REFRESH_INTERVAL_MINUTES = 30
+
+// 数据新鲜度阈值：缓存比这个新就直接用缓存，不再打网络。
+// 主要为了防「多个小组件实例各刷一遍」以及系统短时间内重复唤醒导致的重复请求。
+// 必须小于 REFRESH_INTERVAL_MINUTES，否则会永远用缓存。
+const FRESH_TTL_MS = 10 * 60 * 1000
+
 /**
  * 方案 A 实现逻辑：
  * 桌面小组件读取用户在长按小组件选择的参数（Widget.parameter）
@@ -189,17 +199,17 @@ async function main() {
     } else if (p.includes("fuel") || p.includes("oil") || p.includes("油价")) {
       await refreshFuelData().catch(() => null)
     } else if (p.includes("loon")) {
-      // 如果刚在桌面点击了切换模式/节点（8秒内已更新缓存），跳过耗时网络请求，直接秒级渲染 UI
+      // 刚在桌面点击过切换（FRESH_TTL_MS 内已更新缓存）就直接渲染，不再打网络。
+      // 原来的阈值是 8 秒，多个小组件实例先后渲染时几乎必然各自再刷一遍，白耗电。
       const curLoon = getLoonData()
       const elapsed = Date.now() - (Date.parse(curLoon.updatedAt || "") || 0)
-      if (elapsed > 8000) {
+      if (elapsed > FRESH_TTL_MS) {
         await refreshLoonData().catch(() => null)
       }
     } else if (p.includes("qx") || p.includes("quantumult") || p.includes("圈x")) {
-      // 如果刚在桌面点击了切换模式/节点（8秒内已更新缓存），跳过耗时网络请求，直接秒级渲染 UI
       const curQx = getQxData()
       const elapsed = Date.now() - (Date.parse(curQx.updatedAt || "") || 0)
-      if (elapsed > 8000) {
+      if (elapsed > FRESH_TTL_MS) {
         await refreshQxData().catch(() => null)
       }
     } else {
@@ -213,10 +223,10 @@ async function main() {
   } catch {}
 
   const view = getWidgetView()
-  // 设置 15 分钟系统 timeline 自动刷新（policy: "after"）
+  // 设置系统 timeline 自动刷新（policy: "after"，间隔见 REFRESH_INTERVAL_MINUTES）
   Widget.present(view, {
     policy: "after",
-    date: new Date(Date.now() + 15 * 60 * 1000),
+    date: new Date(Date.now() + REFRESH_INTERVAL_MINUTES * 60 * 1000),
   })
 }
 
