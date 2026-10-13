@@ -1,31 +1,31 @@
 {
-  "contributors": [],
-  "localizedNames": {
-    "en": "DashBoard-Kit",
-    "zh": "DashBoard-Kit"
-  },
   "entry": "index.tsx",
-  "permissions": null,
-  "icon": "rectangle.3.group.fill",
-  "iconImage": "",
-  "intentInputTypes": [],
-  "color": "#1A13ED",
-  "runInApp": true,
   "localizedDescriptions": {
-    "en": "Multi-dashboard kit with unified settings and customizable widget parameters.",
-    "zh": "多组件看板套件：同一后台配置管理，支持方案A桌面参数切换多种看板"
+    "zh": "多组件看板套件：同一后台配置管理，支持方案A桌面参数切换多种看板",
+    "en": "Multi-dashboard kit with unified settings and customizable widget parameters."
   },
-  "description": "多组件看板套件（含 Loon 交互小组件定制版）：同一后台配置管理，支持方案A桌面参数切换多种看板（Loon、Quantumult X、Media Nexus、DeepSeek、Codex、Antigravity、WorkBuddy、CPAMP、qBittorrent、今日油价等）",
+  "intentInputTypes": [],
   "author": {
+    "homepage": "https://github.com/SylvanRoe/Scripting",
     "name": "SylvanRoe",
-    "email": "SylvanRoe@gmail.com",
-    "homepage": "https://github.com/SylvanRoe/Scripting"
+    "email": "SylvanRoe@gmail.com"
   },
-  "version": "1.2.0-Loon",
   "name": "DashBoard-Kit",
   "remoteResource": {
     "url": "https://github.com/BeThyself/scripting/raw/refs/heads/main/DashBoard-Kit/DashBoard-Kit.scripting",
-    "hash": "8b713e1c4329357fd47f924b9d5c0f91",
+    "hash": "79c07a0126616b7ef301b2b97ae0ea56",
     "autoUpdateInterval": 3600
-  }
+  },
+  "permissions": null,
+  "version": "1.2.0-Loon",
+  "runInApp": true,
+  "contributors": [],
+  "description": "多组件看板套件（含 Loon 交互小组件定制版）：同一后台配置管理，支持方案A桌面参数切换多种看板（Loon、Quantumult X、Media Nexus、DeepSeek、Codex、Antigravity、WorkBuddy、CPAMP、qBittorrent、今日油价等）",
+  "localizedNames": {
+    "zh": "DashBoard-Kit",
+    "en": "DashBoard-Kit"
+  },
+  "iconImage": "",
+  "icon": "rectangle.3.group.fill",
+  "color": "#1A13ED"
 }

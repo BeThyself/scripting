@@ -1479,6 +1479,40 @@ const CHINA_IP_APIS = [
   "https://checkip.amazonaws.com",
 ]
 
+// ── 代理节点实时延迟测量 ────────────────────────────────────────────
+// 测速地址用 gstatic 的 204（Loon / 圈X / Surge 测节点延迟用的都是这类地址）。
+// 不要换成 cp.cloudflare.com / ip-api.com：实测同一节点下差异极大
+// （gstatic 120ms，cp.cloudflare 535ms，msft 1155ms），换了数字会虚高数倍。
+const LATENCY_TEST_URL = "http://www.gstatic.com/generate_204"
+
+/**
+ * 测量当前代理出口的实时延迟。
+ *
+ * 两个关键点（都踩过坑）：
+ * 1. 必须**独立计时**，绝不能和「出口 IP 查询」放进同一个 Promise.all 里共用 t0——
+ *    那样等的是两个请求都完成，测到的是较慢那个的耗时（曾因此虚高到 1000+ms）。
+ * 2. 连测多次取**最小值**：首次请求常含冷启动开销（实测 194ms → 120ms），
+ *    最小值最接近链路真实 RTT，也更接近 Loon 里显示的节点延迟。
+ *
+ * 返回 "123 ms"，全部失败返回 ""（调用方保留上一次的值）。
+ */
+async function measureProxyLatency(attempts = 3): Promise<string> {
+  let best = -1
+  for (let i = 0; i < attempts; i++) {
+    const t0 = Date.now()
+    try {
+      const r = await fetch(LATENCY_TEST_URL, { timeout: 5 })
+      if (r.ok || r.status === 204) {
+        const dt = Date.now() - t0
+        if (best < 0 || dt < best) best = dt
+      }
+    } catch {
+      // 单次失败不影响后续尝试
+    }
+  }
+  return best >= 0 ? `${Math.max(8, best)} ms` : ""
+}
+
 const RISK_KEYWORDS = {
   dataCenter: [
     "数据中心",
@@ -2615,27 +2649,22 @@ export async function refreshQxData(): Promise<QuantumultXData | null> {
     }
 
     // 3. 测量实时代理延迟与当前出口地区
+    // 延迟必须独立计时，不能与出口查询共用 t0（详见 measureProxyLatency 注释）
     let latencyMs = current.latencyMs
     let outboundTag = current.outboundTag
-    try {
-      const t0 = Date.now()
-      const [pingRes, ipInfo] = await Promise.all([
-        fetch("http://cp.cloudflare.com/generate_204", { timeout: 3 }).catch(() => null),
-        fetch(IP_API_URL, { timeout: 3.5 })
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null),
-      ])
-      if (pingRes) {
-        const dt = Math.max(8, Date.now() - t0)
-        latencyMs = `${dt} ms`
-      }
-      if (ipInfo && ipInfo.status === "success") {
-        const flag = flagFromCountry(ipInfo.countryCode || ipInfo.country || "")
-        const region = ipInfo.country || ipInfo.regionName || "海外"
-        const firstOctet = String(ipInfo.query || "").split(".")[0]
-        outboundTag = `${flag} ${region}${firstOctet ? ` · ${firstOctet}.*` : ""}`
-      }
-    } catch {}
+    const [measuredLatency, ipInfo] = await Promise.all([
+      measureProxyLatency(3),
+      fetch(IP_API_URL, { timeout: 3.5 })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+    ])
+    if (measuredLatency) latencyMs = measuredLatency
+    if (ipInfo && ipInfo.status === "success") {
+      const flag = flagFromCountry(ipInfo.countryCode || ipInfo.country || "")
+      const region = ipInfo.country || ipInfo.regionName || "海外"
+      const firstOctet = String(ipInfo.query || "").split(".")[0]
+      outboundTag = `${flag} ${region}${firstOctet ? ` · ${firstOctet}.*` : ""}`
+    }
 
     const nextData: QuantumultXData = {
       serviceId: "qx",
@@ -3186,27 +3215,22 @@ export async function refreshLoonData(): Promise<LoonData | null> {
     }
 
     // 3. 测量实时代理延迟与当前出口地区
+    // 延迟必须独立计时，不能与出口查询共用 t0（详见 measureProxyLatency 注释）
     let latencyMs = current.latencyMs
     let outboundTag = current.outboundTag
-    try {
-      const t0 = Date.now()
-      const [pingRes, ipInfo] = await Promise.all([
-        fetch("http://cp.cloudflare.com/generate_204", { timeout: 3 }).catch(() => null),
-        fetch(IP_API_URL, { timeout: 3.5 })
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null),
-      ])
-      if (pingRes) {
-        const dt = Math.max(8, Date.now() - t0)
-        latencyMs = `${dt} ms`
-      }
-      if (ipInfo && ipInfo.status === "success") {
-        const flag = flagFromCountry(ipInfo.countryCode || ipInfo.country || "")
-        const region = ipInfo.country || ipInfo.regionName || "海外"
-        const firstOctet = String(ipInfo.query || "").split(".")[0]
-        outboundTag = `${flag} ${region}${firstOctet ? ` · ${firstOctet}.*` : ""}`
-      }
-    } catch {}
+    const [measuredLatency, ipInfo] = await Promise.all([
+      measureProxyLatency(3),
+      fetch(IP_API_URL, { timeout: 3.5 })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+    ])
+    if (measuredLatency) latencyMs = measuredLatency
+    if (ipInfo && ipInfo.status === "success") {
+      const flag = flagFromCountry(ipInfo.countryCode || ipInfo.country || "")
+      const region = ipInfo.country || ipInfo.regionName || "海外"
+      const firstOctet = String(ipInfo.query || "").split(".")[0]
+      outboundTag = `${flag} ${region}${firstOctet ? ` · ${firstOctet}.*` : ""}`
+    }
 
     const nextData: LoonData = {
       serviceId: "loon",
