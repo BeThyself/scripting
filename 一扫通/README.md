@@ -1,5 +1,9 @@
 # 一扫通
 
+> **一键导入安装**：[点击安装到 Scripting](https://www.scripting.fun/import_scripts/?urls=%5B%22https%3A%2F%2Fgithub.com%2FBeThyself%2Fscripting%2Fraw%2Frefs%2Fheads%2Fmain%2F%E4%B8%80%E6%89%AB%E9%80%9A%2F%E4%B8%80%E6%89%AB%E9%80%9A.scripting%22%5D)
+>
+> 安装后 `script.json` 里的 `remoteResource` 指向本仓库的安装包，每小时自动检查更新。
+
 > 扫一次码，自动跳到对应的 App。
 
 线下扫码最烦的是「这个码该用哪个 App 扫」——微信码要用微信，支付宝码要用支付宝，QQ 码要用 QQ，扫错了就是白扫一次。

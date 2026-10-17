@@ -34,7 +34,7 @@
 | 项目 | 版本 | 描述 | 文档 / 导入 |
 | :--- | :--- | :--- | :--- |
 | **DashBoard-Kit** | `v1.0.7` | 多组件看板聚合套件：统一后台配置管理，支持通过小组件参数自由切换 Quantumult X、Media Nexus、DeepSeek、WorkBuddy、Codex、Antigravity、CPAMP、qBittorrent、今日油价、节点检测等多套精美卡片。 | [查看说明](DashBoard-Kit/) · [一键导入](https://www.scripting.fun/import_scripts/?urls=%5B%22https%3A%2F%2Fgithub.com%2FSylvanRoe%2FScripting%2Fraw%2Frefs%2Fheads%2Fmain%2FDashBoard-Kit%2FDashBoard-Kit.scripting%22%5D) |
-| **一扫通** | `v1.2.0` | 聚合扫码跳转工具：扫一次码自动跳到对应 App，内置 4600+ 条跳转规则，覆盖微信收款码、支付宝直达收银台、云闪付、QQ 登录等；支持聚合收款码优先 App 配置、相册识别、内容解析与最近记录；桌面 `systemSmall` + 锁屏圆形/矩形小组件，点击直接进扫码，全程本地运行不联网。 | [查看说明](一扫通/) |
+| **一扫通** | `v1.2.0` | 聚合扫码跳转工具：扫一次码自动跳到对应 App，内置 4600+ 条跳转规则，覆盖微信收款码、支付宝直达收银台、云闪付、QQ 登录等；支持聚合收款码优先 App 配置、相册识别、内容解析与最近记录；桌面 `systemSmall` + 锁屏圆形/矩形小组件，点击直接进扫码，全程本地运行不联网。 | [查看说明](一扫通/) · [一键导入](https://www.scripting.fun/import_scripts/?urls=%5B%22https%3A%2F%2Fgithub.com%2FBeThyself%2Fscripting%2Fraw%2Frefs%2Fheads%2Fmain%2F%E4%B8%80%E6%89%AB%E9%80%9A%2F%E4%B8%80%E6%89%AB%E9%80%9A.scripting%22%5D) |
 
 ### DashBoard-Kit
 
