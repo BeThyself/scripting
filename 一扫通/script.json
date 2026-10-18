@@ -3,18 +3,18 @@
   "entry": "index.tsx",
   "icon": "qrcode.viewfinder",
   "color": "rgba(10, 132, 255, 1)",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "runInApp": true,
   "description": "Scan once and jump straight to the right app. 4600+ built-in routing rules covering WeChat, Alipay, UnionPay, QQ and more. Tap the Home or Lock Screen widget to launch straight into the scanner. Runs fully on-device with no network access.",
   "localizedNames": {
     "zh": "一扫通"
   },
   "localizedDescriptions": {
-    "zh": "扫一次码，自动跳到对应的 App。内置 4600+ 条跳转规则，覆盖微信、支付宝、云闪付、QQ 等；支付宝收款码直达收银台，微信码自动交回微信扫一扫；聚合收款码可自选优先用哪个 App 付。点击桌面与锁屏小组件即直接进入扫码，也支持从相册识别。全程本地运行、不联网。"
+    "zh": "扫一次码，自动跳到对应的 App。内置 4600+ 条跳转规则，覆盖微信、支付宝、云闪付、QQ 等；支付宝收款码直达收银台，微信码自动交回微信扫一扫；聚合收款码（含银联二维码）可自选优先用哪个 App 付。点击桌面与锁屏小组件即直接进入扫码，也支持从相册识别。全程本地运行、不联网。"
   },
   "remoteResource": {
     "url": "https://github.com/BeThyself/scripting/raw/refs/heads/main/%E4%B8%80%E6%89%AB%E9%80%9A/%E4%B8%80%E6%89%AB%E9%80%9A.scripting",
-    "hash": "1b9733be867357fa75e59a7bd26a1944",
+    "hash": "c8f9de30c42240228afe0eec8b0c2381",
     "autoUpdateInterval": 3600
   }
 }
