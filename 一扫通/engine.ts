@@ -230,12 +230,23 @@ const CORE_RULES: CoreRule[] = [
     build: () => "weixin://scanqrcode",
   },
   {
-    // 银联云闪付收款码
-    test: (_c, h) => h === "95516.com" || h.endsWith(".95516.com"),
+    // 银联二维码——没被自动识别为聚合码的子域。
+    test: (_c, h) => (h === "95516.com" || h.endsWith(".95516.com")) && !isAggregatePayHost(h),
     title: "银联收款码",
     category: "收款支付",
     app: { name: "云闪付", icon: "creditcard.fill" },
     build: () => "upwallet://native/scanCode",
+  },
+  {
+    // 银联二维码 = 聚合收款码：微信 / 支付宝 / 云闪付 都能付。
+    // 得分压到 29000，低于聚合规则（30000）：用户在设置里选了偏好 App 就让位；
+    // 选「自动」时这条仍是最高分，默认交给云闪付（最自然，也不误伤）。
+    test: (_c, h) => (h === "95516.com" || h.endsWith(".95516.com")) && isAggregatePayHost(h),
+    title: "银联收款码（默认云闪付）",
+    category: "收款支付",
+    app: { name: "云闪付", icon: "creditcard.fill" },
+    build: () => "upwallet://native/scanCode",
+    score: 29000,
   },
   {
     // 微信收款码：wxp:// 微信没有对外开放，外部 App 打不开，只能交给微信扫一扫
@@ -986,11 +997,11 @@ export function describeContent(raw: string, aggregatePay: AggregatePayApp = "�
     )
   }
 
-  if (h === "95516.com" || h.endsWith(".95516.com")) {
+  if ((h === "95516.com" || h.endsWith(".95516.com")) && !isAggregatePayHost(h)) {
     return info(
       c,
       "银联收款码",
-      "中国银联收款码，交给云闪付扫一扫处理。",
+      "银联二维码，属于聚合收款码（微信 / 支付宝 / 云闪付 都能付）。这个子域还没被自动识别，默认交给云闪付。",
       false,
       "upwallet://native/scanCode",
       "云闪付",
